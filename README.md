@@ -61,7 +61,7 @@ pip install -r requirements.txt
 python server.py
 ```
 
-The server will start on `http://0.0.0.0:5000`
+The server will start on `http://0.0.0.0:5050`
 
 You should see output like:
 ```
@@ -69,17 +69,17 @@ You should see output like:
 🚀 Digital Library Server Starting...
 ============================================================
 
-Server running on: http://0.0.0.0:5000
-For Android Emulator, use: http://10.0.2.2:5000
+Server running on: http://0.0.0.0:5050
+For Android Emulator, use: http://10.0.2.2:5050
 For your Mac IP: Check with 'ipconfig getifaddr en0'
 ```
 
 ## 📡 API Endpoints
 
 ### Base URL
-- **Local Development**: `http://localhost:5000`
-- **Android Emulator**: `http://10.0.2.2:5000`
-- **Network**: `http://YOUR_IP:5000`
+- **Local Development**: `http://localhost:5050`
+- **Android Emulator**: `http://10.0.2.2:5050`
+- **Network**: `http://YOUR_IP:5050`
 
 ### Endpoints
 
@@ -175,7 +175,7 @@ Receive new book additions.
 Edit `server.py` and modify the last line:
 
 ```python
-app.run(host='0.0.0.0', port=5000, debug=True)  # Change 5000 to your desired port
+app.run(host='0.0.0.0', port=5050, debug=True)  # Change 5000 to your desired port
 ```
 
 ### Finding Your Mac's IP Address
@@ -192,7 +192,7 @@ ipconfig
 
 Then update the Flutter app's `lib/services/api_service.dart`:
 ```dart
-static const String _defaultServerUrl = 'http://YOUR_IP:5000';
+static const String _defaultServerUrl = 'http://YOUR_IP:5050';
 ```
 
 ## 🧪 Testing
@@ -201,7 +201,7 @@ static const String _defaultServerUrl = 'http://YOUR_IP:5000';
 
 **Test borrow transaction:**
 ```bash
-curl -X POST http://localhost:5000/api/transaction \
+curl -X POST http://localhost:5050/api/transaction \
   -H "Content-Type: application/json" \
   -d '{
     "action": "borrow",
@@ -226,7 +226,7 @@ curl -X POST http://localhost:5000/api/transaction \
 
 **Test add book:**
 ```bash
-curl -X POST http://localhost:5000/api/book \
+curl -X POST http://localhost:5050/api/book \
   -H "Content-Type: application/json" \
   -d '{
     "action": "add_book",
@@ -272,8 +272,8 @@ Raw JSON:
 
 **Solutions:**
 1. Make sure the server is running (check terminal for Flask output)
-2. Check firewall settings - allow incoming connections on port 5000
-3. For Android emulator, use `http://10.0.2.2:5000`
+2. Check firewall settings - allow incoming connections on port 5050
+3. For Android emulator, use `http://10.0.2.2:5050`
 4. For real device, ensure both device and computer are on the same WiFi network
 5. Use your computer's actual IP address, not `localhost` or `127.0.0.1`
 
@@ -283,8 +283,8 @@ Raw JSON:
 
 **Solution:**
 ```bash
-# Find process using port 5000
-lsof -i :5000
+# Find process using port 5050
+lsof -i :5050
 
 # Kill the process
 kill -9 <PID>
@@ -325,9 +325,9 @@ To enable communication:
 1. **Start this server** on your computer
 2. **Update the mobile app** configuration in `lib/services/api_service.dart`:
    ```dart
-   static const String _defaultServerUrl = 'http://10.0.2.2:5000'; // For emulator
+   static const String _defaultServerUrl = 'http://10.0.2.2:5050'; // For emulator
    // OR
-   static const String _defaultServerUrl = 'http://YOUR_IP:5000'; // For real device
+   static const String _defaultServerUrl = 'http://YOUR_IP:5050'; // For real device
    ```
 3. **Uncomment** the API calls in the mobile app's `transaction_provider.dart`
 4. **Run the mobile app** and perform transactions
@@ -371,7 +371,7 @@ This server is being built for a **tech-illiterate librarian** at a school in Ja
   - No need to manually enter IP addresses
   - Uses `zeroconf` (Python) + `nsd_android` (Flutter)
   
-- [ ] **Simple GUI Dashboard**
+- [✅] **Simple GUI Dashboard**
   - Web-based interface at `http://localhost:5000/dashboard`
   - Shows connection status (Connected ✓ / Waiting for connection...)
   - Displays recent transactions in real-time

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Library Server Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .header-content {
+            flex: 1;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px 25px;
+            border-radius: 50px;
+            font-size: 1.3em;
+            font-weight: bold;
+            background: #10b981;
+            color: white;
+        }
+
+        .status-badge::before {
+            content: "●";
+            font-size: 1.5em;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .language-toggle {
+            display: flex;
+            gap: 10px;
+            background: #f3f4f6;
+            padding: 8px;
+            border-radius: 50px;
+        }
+
+        .language-toggle button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 50px;
+            background: transparent;
+            color: #6b7280;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 1em;
+        }
+
+        .language-toggle button.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .language-toggle button:hover:not(.active) {
+            color: #374151;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .info-card h3 {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .info-card .value {
+            color: #333;
+            font-size: 2em;
+            font-weight: bold;
+        }
+
+        .info-card .ip-address {
+            font-family: 'Courier New', monospace;
+            font-size: 1.5em;
+            background: #f3f4f6;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            word-break: break-all;
+        }
+
+        .transactions-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .transactions-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .transaction-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .transaction-item {
+            background: #f9fafb;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .transaction-item.borrow {
+            border-left-color: #10b981;
+        }
+
+        .transaction-item.return {
+            border-left-color: #f59e0b;
+        }
+
+        .transaction-item.add_book {
+            border-left-color: #3b82f6;
+        }
+
+        .transaction-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .transaction-type {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .transaction-type.borrow {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .transaction-type.return {
+            background: #fed7aa;
+            color: #92400e;
+        }
+
+        .transaction-type.add_book {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .transaction-time {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+
+        .transaction-details {
+            color: #374151;
+            line-height: 1.6;
+        }
+
+        .transaction-details strong {
+            color: #1f2937;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #9ca3af;
+        }
+
+        .empty-state svg {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 30px;
+            font-size: 0.9em;
+        }
+
+        .copy-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-top: 10px;
+            transition: background 0.2s;
+        }
+
+        .copy-button:hover {
+            background: #5568d3;
+        }
+
+        .copy-button:active {
+            transform: scale(0.95);
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .language-toggle {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-content">
+                <h1 id="page-title">📚 Library Server Dashboard</h1>
+                <div class="status-badge" id="status-badge">Server Running</div>
+            </div>
+            <div class="language-toggle">
+                <button onclick="setLanguage('en')" id="lang-en" class="active">English</button>
+                <button onclick="setLanguage('id')" id="lang-id">Bahasa</button>
+            </div>
+        </div>
+
+        <div class="info-grid">
+            <div class="info-card">
+                <h3 id="label-transactions">Transactions Today</h3>
+                <div class="value" id="transaction-count">0</div>
+            </div>
+            <div class="info-card">
+                <h3 id="label-server-address">Server Address</h3>
+                <div class="ip-address" id="server-ip">Loading...</div>
+                <button class="copy-button" onclick="copyIP()" id="copy-button">Copy Address</button>
+            </div>
+            <div class="info-card">
+                <h3 id="label-status">Status</h3>
+                <div class="value" style="color: #10b981;" id="status-ready">✓ Ready</div>
+            </div>
+        </div>
+
+        <div class="transactions-section">
+            <h2 id="label-recent">Recent Transactions</h2>
+            <div class="transaction-list" id="transaction-list">
+                <div class="empty-state">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                    </svg>
+                    <p id="empty-waiting">Waiting for transactions...</p>
+                    <p style="margin-top: 10px; font-size: 0.9em;" id="empty-instruction">Open the mobile app and scan a book!</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p id="footer-text">Digital Library Server v1.0 • Made with ❤️ for education</p>
+        </div>
+    </div>
+
+    <script>
+        // Translations
+        const translations = {
+            en: {
+                pageTitle: '📚 Library Server Dashboard',
+                statusBadge: 'Server Running',
+                labelTransactions: 'Transactions Today',
+                labelServerAddress: 'Server Address',
+                copyButton: 'Copy Address',
+                copyButtonSuccess: '✓ Copied!',
+                labelStatus: 'Status',
+                statusReady: '✓ Ready',
+                labelRecent: 'Recent Transactions',
+                emptyWaiting: 'Waiting for transactions...',
+                emptyInstruction: 'Open the mobile app and scan a book!',
+                footerText: 'Digital Library Server v1.0 • Made with ❤️ for education',
+                borrow: 'BORROW',
+                return: 'RETURN',
+                addBook: 'ADD BOOK',
+                student: 'Student',
+                bookId: 'Book ID',
+                title: 'Title',
+                author: 'Author'
+            },
+            id: {
+                pageTitle: '📚 Dashboard Server Perpustakaan',
+                statusBadge: 'Server Berjalan',
+                labelTransactions: 'Transaksi Hari Ini',
+                labelServerAddress: 'Alamat Server',
+                copyButton: 'Salin Alamat',
+                copyButtonSuccess: '✓ Tersalin!',
+                labelStatus: 'Status',
+                statusReady: '✓ Siap',
+                labelRecent: 'Transaksi Terkini',
+                emptyWaiting: 'Menunggu transaksi...',
+                emptyInstruction: 'Buka aplikasi mobile dan pindai buku!',
+                footerText: 'Digital Library Server v1.0 • Dibuat dengan ❤️ untuk pendidikan',
+                borrow: 'PINJAM',
+                return: 'KEMBALI',
+                addBook: 'TAMBAH BUKU',
+                student: 'Siswa',
+                bookId: 'ID Buku',
+                title: 'Judul',
+                author: 'Penulis'
+            }
+        };
+
+        let currentLanguage = localStorage.getItem('dashboard-language') || 'id'; // Default to Indonesian
+        let transactionCount = 0;
+        const transactionList = document.getElementById('transaction-list');
+        const serverIp = document.getElementById('server-ip');
+
+        // Initialize language
+        setLanguage(currentLanguage);
+
+        function setLanguage(lang) {
+            currentLanguage = lang;
+            localStorage.setItem('dashboard-language', lang);
+
+            // Update button states
+            document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+            document.getElementById('lang-id').classList.toggle('active', lang === 'id');
+
+            // Update all text
+            const t = translations[lang];
+            document.getElementById('page-title').textContent = t.pageTitle;
+            document.getElementById('status-badge').textContent = t.statusBadge;
+            document.getElementById('label-transactions').textContent = t.labelTransactions;
+            document.getElementById('label-server-address').textContent = t.labelServerAddress;
+            document.getElementById('copy-button').textContent = t.copyButton;
+            document.getElementById('label-status').textContent = t.labelStatus;
+            document.getElementById('status-ready').textContent = t.statusReady;
+            document.getElementById('label-recent').textContent = t.labelRecent;
+            document.getElementById('empty-waiting').textContent = t.emptyWaiting;
+            document.getElementById('empty-instruction').textContent = t.emptyInstruction;
+            document.getElementById('footer-text').innerHTML = t.footerText;
+
+            // Re-render transactions with new language
+            fetchTransactions();
+        }
+
+        // Fetch server IP
+        fetch('/api/server-info')
+            .then(res => res.json())
+            .then(data => {
+                serverIp.textContent = data.ip || 'localhost:80';
+            })
+            .catch(() => {
+                serverIp.textContent = 'localhost:80';
+            });
+
+        function copyIP() {
+            const ip = serverIp.textContent;
+            const t = translations[currentLanguage];
+            navigator.clipboard.writeText(`http://${ip}`).then(() => {
+                const btn = document.getElementById('copy-button');
+                const originalText = btn.textContent;
+                btn.textContent = t.copyButtonSuccess;
+                setTimeout(() => {
+                    btn.textContent = t.copyButton;
+                }, 2000);
+            });
+        }
+
+        // Poll for new transactions
+        function fetchTransactions() {
+            fetch('/api/recent-transactions')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.transactions && data.transactions.length > 0) {
+                        updateTransactionList(data.transactions);
+                        transactionCount = data.transactions.length;
+                        document.getElementById('transaction-count').textContent = transactionCount;
+                    }
+                })
+                .catch(err => console.error('Error fetching transactions:', err));
+        }
+
+        function updateTransactionList(transactions) {
+            const t = translations[currentLanguage];
+
+            // Clear empty state
+            transactionList.innerHTML = '';
+
+            // Show transactions (most recent first)
+            transactions.reverse().forEach(transaction => {
+                const item = createTransactionItem(transaction, t);
+                transactionList.appendChild(item);
+            });
+        }
+
+        function createTransactionItem(transaction, t) {
+            const div = document.createElement('div');
+            div.className = `transaction-item ${transaction.action}`;
+
+            const time = new Date(transaction.timestamp).toLocaleTimeString();
+
+            let actionLabel = transaction.action === 'borrow' ? t.borrow :
+                            transaction.action === 'return' ? t.return : t.addBook;
+
+            let details = '';
+            if (transaction.action === 'borrow') {
+                details = `
+                    <strong>${t.student}:</strong> ${transaction.data.student_name} (${transaction.data.student_grade})<br>
+                    <strong>${t.bookId}:</strong> ${transaction.data.book_id}
+                `;
+            } else if (transaction.action === 'return') {
+                details = `<strong>${t.bookId}:</strong> ${transaction.data.book_id}`;
+            } else if (transaction.action === 'add_book') {
+                details = `
+                    <strong>${t.title}:</strong> ${transaction.data.title}<br>
+                    <strong>${t.author}:</strong> ${transaction.data.author}<br>
+                    <strong>${t.bookId}:</strong> ${transaction.data.book_id}
+                `;
+            }
+
+            div.innerHTML = `
+                <div class="transaction-header">
+                    <span class="transaction-type ${transaction.action}">${actionLabel}</span>
+                    <span class="transaction-time">${time}</span>
+                </div>
+                <div class="transaction-details">${details}</div>
+            `;
+
+            return div;
+        }
+
+        // Fetch transactions every 2 seconds
+        fetchTransactions();
+        setInterval(fetchTransactions, 2000);
+    </script>
+</body>
+</html>
