@@ -37,9 +37,15 @@ def _format_dt(value):
     if not value:
         return ""
 
+    def _to_wib(dt: datetime):
+        """Coerce naive datetimes to UTC before converting to Jakarta."""
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(JAKARTA_TZ)
+
     # If already datetime → convert to WIB
     if isinstance(value, datetime):
-        return value.astimezone(JAKARTA_TZ).strftime("%d %b %Y, %H:%M:%S WIB")
+        return _to_wib(value).strftime("%d %b %Y, %H:%M:%S WIB")
 
     # Try parsing ISO strings
     try:
@@ -49,12 +55,11 @@ def _format_dt(value):
             s = s[:-1] + "+00:00"
 
         dt = datetime.fromisoformat(s)
-        dt = dt.astimezone(JAKARTA_TZ)
+        dt = _to_wib(dt)
         return dt.strftime("%d %b %Y, %H:%M:%S WIB")
     except Exception:
         # If unparseable, return original
         return value
-
     
 def init_excel():
     """
@@ -80,14 +85,13 @@ def init_excel():
     # -------- Log sheet --------
     ws_log = wb.create_sheet(LOG_SHEET)
     ws_log.append([
-        "Waktu",             # timestamp (Jakarta)
-        "Kode Buku",         # book_id
-        "Judul Buku",        # title (if sent)
-        "Nama Peminjam",     # student_name
-        "Kelas",             # student_grade
-        "Tanggal Pinjam",    # borrow_date
-        "Jatuh Tempo",       # due_date
-        "Tanggal Kembali",   # return_date
+        "Jenis Transaksi",         # Pinjam / Kembali
+        "Tanggal Transaksi",       # borrow/return date
+        "Kode Buku",               # book_id
+        "Judul Buku",              # title
+        "Nama Peminjam",           # student_name
+        "Kelas",                   # student_grade
+        "Tanggal Jatuh Tempo",     # due_date
     ])
 
     # -------- Summary sheet --------
@@ -132,6 +136,55 @@ def _get_or_create_summary_sheet(wb):
             "Total Dipinjam",
         ])
     return ws
+
+def _lookup_title_by_book_id(wb, book_id: str) -> str:
+    """
+    Find the book title in the Catalogue sheet by book_id (case-insensitive).
+    Returns empty string if not found.
+    """
+    if not book_id:
+        return ""
+
+    if CATALOGUE_SHEET not in wb.sheetnames:
+        return ""
+
+    ws_catalogue = wb[CATALOGUE_SHEET]
+    target = str(book_id).strip().lower()
+
+    for row in ws_catalogue.iter_rows(min_row=2, values_only=True):
+        existing_id = str(row[0]).strip().lower() if row[0] else ""
+        if existing_id == target:
+            return row[1] or ""
+
+    return ""
+
+def _latest_borrow_info(wb, book_id: str):
+    """
+    Return the most recent borrow info for a given book_id from Log sheet.
+    Uses appended order (bottom is latest). Returns dict with keys:
+    title, student_name, student_grade, due_date, tanggal_transaksi.
+    """
+    if not book_id or LOG_SHEET not in wb.sheetnames:
+        return {}
+
+    ws_log = wb[LOG_SHEET]
+    target = str(book_id).strip().lower()
+
+    # Iterate from bottom to find latest matching borrow
+    for row in reversed(list(ws_log.iter_rows(min_row=2, values_only=True))):
+        if not row:
+            continue
+        jenis = (row[0] or "").strip().lower()
+        logged_book_id = str(row[2]).strip().lower() if len(row) > 2 and row[2] else ""
+        if jenis == "pinjam" and logged_book_id == target:
+            return {
+                "title": row[3] or "",
+                "student_name": row[4] or "",
+                "student_grade": row[5] or "",
+                "due_date": row[6] or "",
+                "tanggal_transaksi": row[1] or "",
+            }
+    return {}
 
 def _update_summary_for_book(ws_summary, book_id, title, borrower, kelas,
                              jenis, tanggal_transaksi, tanggal_jatuh_tempo):
@@ -291,7 +344,6 @@ def append_log_row(data: dict):
         else:
             ws = wb.create_sheet(LOG_SHEET)
             ws.append([
-                "Waktu Log",
                 "Jenis Transaksi",
                 "Tanggal Transaksi",
                 "Kode Buku",
@@ -302,7 +354,7 @@ def append_log_row(data: dict):
             ])
 
         # Timestamp now (WIB)
-        waktu_log = _now_wib_str()
+        #waktu_log = _now_wib_str()
 
         # Determine action translation
         action = (data.get("action") or "").lower()
@@ -324,15 +376,30 @@ def append_log_row(data: dict):
             tanggal_transaksi = _format_dt(data.get("borrow_date") or data.get("return_date"))
             tanggal_jatuh_tempo = _format_dt(data.get("due_date"))
 
+        # Prefer payload title; fall back to catalogue lookup
+        title = data.get("title") or _lookup_title_by_book_id(wb, data.get("book_id", ""))
+
+        # For return: backfill missing borrower/class/due_date from latest borrow
+        if jenis == "Kembali":
+            last_borrow = _latest_borrow_info(wb, data.get("book_id", ""))
+            data_student_name = data.get("student_name") or last_borrow.get("student_name", "")
+            data_student_grade = data.get("student_grade") or last_borrow.get("student_grade", "")
+            tanggal_jatuh_tempo = tanggal_jatuh_tempo or last_borrow.get("due_date", "")
+            # If no title found yet, try last borrow title
+            if not title:
+                title = last_borrow.get("title", "")
+        else:
+            data_student_name = data.get("student_name", "")
+            data_student_grade = data.get("student_grade", "")
+
         # Append to Log sheet
         row_values = [
-            waktu_log,
             jenis,
             tanggal_transaksi,
             data.get("book_id", ""),
-            data.get("title", ""),
-            data.get("student_name", ""),
-            data.get("student_grade", ""),
+            title,
+            data_student_name,
+            data_student_grade,
             tanggal_jatuh_tempo,
         ]
         ws.append(row_values)
@@ -342,9 +409,9 @@ def append_log_row(data: dict):
         _update_summary_for_book(
             ws_summary,
             book_id=data.get("book_id", ""),
-            title=data.get("title", ""),
-            borrower=data.get("student_name", ""),
-            kelas=data.get("student_grade", ""),
+            title=title,
+            borrower=data_student_name,
+            kelas=data_student_grade,
             jenis=jenis,
             tanggal_transaksi=tanggal_transaksi,
             tanggal_jatuh_tempo=tanggal_jatuh_tempo,
