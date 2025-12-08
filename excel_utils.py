@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from threading import Lock
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import PatternFill
 from zoneinfo import ZoneInfo
 import json
 
@@ -15,6 +16,11 @@ SUMMARY_SHEET = "Ringkasan Transaksi Buku"
 
 # Jakarta timezone (WIB = UTC+7)
 JAKARTA_TZ = timezone(timedelta(hours=7))
+
+# Color fills for status indicators (Summary sheet)
+FILL_GREEN = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+FILL_YELLOW = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+FILL_RED = PatternFill(start_color="F8CBAD", end_color="F8CBAD", fill_type="solid")
 
 _excel_lock = Lock()
 
@@ -60,6 +66,49 @@ def _format_dt(value):
     except Exception:
         # If unparseable, return original
         return value
+
+def _to_wib_datetime(value):
+    """
+    Convert a datetime-like value to a timezone-aware datetime in WIB.
+    Returns None if parsing fails.
+    """
+    if not value:
+        return None
+
+    def _as_wib(dt: datetime):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(JAKARTA_TZ)
+
+    if isinstance(value, datetime):
+        return _as_wib(value)
+
+    try:
+        s = str(value)
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        return _as_wib(dt)
+    except Exception:
+        pass
+
+    # Fallback: try common date-only formats (often typed directly in Excel)
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y"):
+        try:
+            dt = datetime.strptime(str(value), fmt)
+            return _as_wib(dt)
+        except Exception:
+            continue
+
+    # Fallback: formatted with month abbreviations and WIB suffix
+    try:
+        dt = datetime.strptime(str(value), "%d %b %Y, %H:%M:%S WIB")
+        return _as_wib(dt)
+    except Exception:
+        pass
+
+    # If still not parsable, give up
+    return None
     
 def init_excel():
     """
@@ -105,6 +154,7 @@ def init_excel():
         "Tanggal Transaksi Terakhir",   # last borrow/return date
         "Tanggal Jatuh Tempo Terakhir", # last due date (if any)
         "Total Dipinjam",               # how many times borrowed
+        "Status Keterlambatan",         # overdue indicator
     ])
 
     wb.save(EXCEL_FILE)
@@ -134,7 +184,13 @@ def _get_or_create_summary_sheet(wb):
             "Tanggal Transaksi Terakhir",
             "Tanggal Jatuh Tempo Terakhir",
             "Total Dipinjam",
+            "Status Keterlambatan",
         ])
+
+    # Ensure overdue status column exists (in case of older files)
+    headers = [cell.value for cell in ws[1]]
+    if "Status Keterlambatan" not in headers:
+        ws.cell(row=1, column=len(headers) + 1).value = "Status Keterlambatan"
     return ws
 
 def _lookup_title_by_book_id(wb, book_id: str) -> str:
@@ -185,6 +241,63 @@ def _latest_borrow_info(wb, book_id: str):
                 "tanggal_transaksi": row[1] or "",
             }
     return {}
+
+def _compute_overdue_status(status_value, due_date_value):
+    """
+    Given status ("Dipinjam"/"Tersedia") and due_date value, return
+    (status_text, fill_color) where fill_color is an openpyxl PatternFill.
+    """
+    # Available books or missing due dates are treated as not overdue
+    if status_value != "Dipinjam":
+        return "Tersedia / Tidak Terlambat", FILL_GREEN
+
+    due_dt = _to_wib_datetime(due_date_value)
+    if not due_dt:
+        return "Belum ada jatuh tempo", FILL_GREEN
+
+    delta_days = (_now_wib().date() - due_dt.date()).days
+
+    if delta_days > 7:
+        return f"Terlambat {delta_days} hari", FILL_RED
+    elif delta_days > 0:
+        return f"Terlambat {delta_days} hari", FILL_YELLOW
+    else:
+        return "Belum Jatuh Tempo", FILL_GREEN
+
+def _refresh_overdue_status(ws_summary):
+    """
+    Update the overdue status text and color for every row in the Summary sheet.
+    Should be called after any log update (borrow/return) to keep statuses fresh.
+    """
+    # Determine column indices based on header names for resilience
+    headers = [cell.value for cell in ws_summary[1]]
+    try:
+        idx_status = headers.index("Status")
+        idx_due = headers.index("Tanggal Jatuh Tempo Terakhir")
+        idx_overdue = headers.index("Status Keterlambatan")
+    except ValueError:
+        return  # headers not as expected; fail silently
+
+    for row in ws_summary.iter_rows(min_row=2):
+        status_val = row[idx_status].value or ""
+        due_val = row[idx_due].value or ""
+
+        text, fill = _compute_overdue_status(status_val, due_val)
+
+        # Ensure the overdue status cell exists
+        overdue_cell = row[idx_overdue]
+        overdue_cell.value = text
+        overdue_cell.fill = fill
+
+def refresh_summary_overdue_status():
+    """
+    Public helper to refresh overdue status in the Summary sheet.
+    Useful to call on server startup.
+    """
+    wb = _get_workbook()
+    ws_summary = _get_or_create_summary_sheet(wb)
+    _refresh_overdue_status(ws_summary)
+    wb.save(EXCEL_FILE)
 
 def _update_summary_for_book(ws_summary, book_id, title, borrower, kelas,
                              jenis, tanggal_transaksi, tanggal_jatuh_tempo):
@@ -238,6 +351,7 @@ def _update_summary_for_book(ws_summary, book_id, title, borrower, kelas,
             tanggal_transaksi,    # Tanggal Transaksi Terakhir
             tanggal_jatuh_tempo,  # Tanggal Jatuh Tempo Terakhir
             total_int,            # Total Dipinjam
+            "",                   # Status Keterlambatan (filled later)
         ])
 
 def _catalogue_has_duplicate(ws, new_book_id):
@@ -416,6 +530,9 @@ def append_log_row(data: dict):
             tanggal_transaksi=tanggal_transaksi,
             tanggal_jatuh_tempo=tanggal_jatuh_tempo,
         )
+
+        # Refresh overdue status coloring/text
+        _refresh_overdue_status(ws_summary)
 
         # Save everything
         wb.save(EXCEL_FILE)

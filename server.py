@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from excel_utils import init_excel, append_log_row, append_catalogue_row
+from excel_utils import init_excel, append_log_row, append_catalogue_row, refresh_summary_overdue_status
 import json
 import socket
 import webbrowser
@@ -11,6 +11,26 @@ import time
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
+
+# Ensure Excel is initialized and summary overdue status is refreshed once per process
+_excel_ready = False
+
+
+def ensure_excel_ready():
+    global _excel_ready
+    if _excel_ready:
+        return
+    init_excel()
+    try:
+        refresh_summary_overdue_status()
+    except Exception as e:
+        # Colors not yet defined here; use plain print
+        print(f"[WARN] Failed to refresh overdue status on startup: {e}")
+    _excel_ready = True
+
+
+# Initialize Excel/summary at import time (safe to re-run per process)
+ensure_excel_ready()
 
 
 # Store recent transactions in memory
@@ -245,8 +265,8 @@ def receive_book():
 if __name__ == '__main__':
     local_ip = get_local_ip()
 
-    # NEW: make sure Excel file & sheets exist
-    init_excel()
+    # NEW: make sure Excel file & sheets exist and refresh overdue status
+    ensure_excel_ready()
 
     print(f"{Colors.BOLD}{Colors.OKGREEN}")
     print("=" * 60)
