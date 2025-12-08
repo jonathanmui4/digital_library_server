@@ -124,37 +124,37 @@ def init_excel():
     ws_catalogue = wb.active
     ws_catalogue.title = CATALOGUE_SHEET
     ws_catalogue.append([
-        "Kode Buku",          # book_id
-        "Judul Buku",         # title
-        "Penulis",            # author
-        "Kategori",           # category
-        "Tanggal Ditambahkan" # added_date (local Jakarta time if missing)
+        "Book ID (Kode Buku)",                  # book_id
+        "Title (Judul Buku)",                   # title
+        "Author (Penulis)",                     # author
+        "Category (Kategori)",                  # category
+        "Added Date (Tanggal Ditambahkan)",     # added_date (local Jakarta time if missing)
     ])
 
     # -------- Log sheet --------
     ws_log = wb.create_sheet(LOG_SHEET)
     ws_log.append([
-        "Jenis Transaksi",         # Pinjam / Kembali
-        "Tanggal Transaksi",       # borrow/return date
-        "Kode Buku",               # book_id
-        "Judul Buku",              # title
-        "Nama Peminjam",           # student_name
-        "Kelas",                   # student_grade
-        "Tanggal Jatuh Tempo",     # due_date
+        "Transaction Type (Jenis Transaksi)",     # Pinjam / Kembali
+        "Transaction Date (Tanggal Transaksi)",    # borrow/return date
+        "Book ID (Kode Buku)",                     # book_id
+        "Book Title (Judul Buku)",                 # title
+        "Borrower Name (Nama Peminjam)",           # student_name
+        "Class (Kelas)",                           # student_grade
+        "Due Date (Tanggal Jatuh Tempo)",          # due_date
     ])
 
     # -------- Summary sheet --------
     ws_summary = wb.create_sheet(SUMMARY_SHEET)
     ws_summary.append([
-        "Kode Buku",                    # book_id (PRIMARY KEY)
-        "Judul Buku",                   # last known title
-        "Status",                       # Dipinjam / Tersedia
-        "Nama Terakhir",                # last borrower name
-        "Kelas Terakhir",               # last borrower class
-        "Tanggal Transaksi Terakhir",   # last borrow/return date
-        "Tanggal Jatuh Tempo Terakhir", # last due date (if any)
-        "Total Dipinjam",               # how many times borrowed
-        "Status Keterlambatan",         # overdue indicator
+        "Book ID (Kode Buku)",                             # book_id (PRIMARY KEY)
+        "Book Title (Judul Buku)",                         # last known title
+        "Status",                                          # Dipinjam / Tersedia
+        "Last Borrower (Nama Terakhir)",                   # last borrower name
+        "Last Class (Kelas Terakhir)",                     # last borrower class
+        "Last Transaction Date (Tanggal Transaksi Terakhir)",   # last borrow/return date
+        "Last Due Date (Tanggal Jatuh Tempo Terakhir)",     # last due date (if any)
+        "Total Borrowed (Total Dipinjam)",                  # how many times borrowed
+        "Overdue Status (Status Keterlambatan)",            # overdue indicator
     ])
 
     wb.save(EXCEL_FILE)
@@ -176,21 +176,28 @@ def _get_or_create_summary_sheet(wb):
     else:
         ws = wb.create_sheet(SUMMARY_SHEET)
         ws.append([
-            "Kode Buku",
-            "Judul Buku",
+            "Book ID (Kode Buku)",
+            "Book Title (Judul Buku)",
             "Status",
-            "Nama Terakhir",
-            "Kelas Terakhir",
-            "Tanggal Transaksi Terakhir",
-            "Tanggal Jatuh Tempo Terakhir",
-            "Total Dipinjam",
-            "Status Keterlambatan",
+            "Last Borrower (Nama Terakhir)",
+            "Last Class (Kelas Terakhir)",
+            "Last Transaction Date (Tanggal Transaksi Terakhir)",
+            "Last Due Date (Tanggal Jatuh Tempo Terakhir)",
+            "Total Borrowed (Total Dipinjam)",
+            "Overdue Status (Status Keterlambatan)",
         ])
 
-    # Ensure overdue status column exists (in case of older files)
+    # Ensure exactly one overdue status column (handle legacy duplicates)
     headers = [cell.value for cell in ws[1]]
-    if "Status Keterlambatan" not in headers:
-        ws.cell(row=1, column=len(headers) + 1).value = "Status Keterlambatan"
+    overdue_header = "Overdue Status (Status Keterlambatan)"
+    overdue_cols = [idx + 1 for idx, val in enumerate(headers) if val == overdue_header]
+
+    if not overdue_cols:
+        ws.cell(row=1, column=len(headers) + 1).value = overdue_header
+    elif len(overdue_cols) > 1:
+        # Keep the first, remove the rest to avoid duplicated columns
+        for col_idx in reversed(overdue_cols[1:]):  # delete from the right to left
+            ws.delete_cols(col_idx)
     return ws
 
 def _lookup_title_by_book_id(wb, book_id: str) -> str:
@@ -273,8 +280,8 @@ def _refresh_overdue_status(ws_summary):
     headers = [cell.value for cell in ws_summary[1]]
     try:
         idx_status = headers.index("Status")
-        idx_due = headers.index("Tanggal Jatuh Tempo Terakhir")
-        idx_overdue = headers.index("Status Keterlambatan")
+        idx_due = headers.index("Last Due Date (Tanggal Jatuh Tempo Terakhir)")
+        idx_overdue = headers.index("Overdue Status (Status Keterlambatan)")
     except ValueError:
         return  # headers not as expected; fail silently
 
@@ -313,9 +320,13 @@ def _update_summary_for_book(ws_summary, book_id, title, borrower, kelas,
 
     status = "Dipinjam" if jenis == "Pinjam" else "Tersedia"
 
+    def _norm(value):
+        return str(value).strip().lower() if value is not None else ""
+
     existing_row = None
+    target = _norm(book_id)
     for row in ws_summary.iter_rows(min_row=2):
-        if (row[0].value or "") == book_id:
+        if _norm(row[0].value) == target:
             existing_row = row
             break
 

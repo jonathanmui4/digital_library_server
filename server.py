@@ -164,6 +164,13 @@ def receive_transaction():
         # write to excel
         try:
             append_log_row(data)
+
+            # Extra safeguard: refresh overdue status whenever a return is processed
+            if action == 'return':
+                try:
+                    refresh_summary_overdue_status()
+                except Exception as e:
+                    print(f"{Colors.WARNING}[EXCEL] Failed to refresh overdue status after return: {e}{Colors.ENDC}")
         except Exception as e:
             print(f"{Colors.FAIL}[EXCEL] Failed to write log: {e}{Colors.ENDC}")
 
