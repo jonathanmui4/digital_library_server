@@ -216,13 +216,6 @@ def receive_book():
         }
         recent_transactions.insert(0, transaction_record)
 
-        # Store transaction for dashboard
-        transaction_record = {
-            'action': 'add_book',
-            'data': data,
-            'timestamp': datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%d %b %Y, %H:%M:%S")
-        }
-
         if len(recent_transactions) > MAX_TRANSACTIONS:
             recent_transactions.pop()
 
@@ -239,19 +232,6 @@ def receive_book():
         print(json.dumps(data, indent=2))
         print_separator()
         print()
-
-        # NEW: Write to Excel and detect duplicates
-        excel_result = append_catalogue_row(data)
-
-        # If duplicate, warn the app
-        if excel_result and excel_result.get("duplicate"):
-            print(f"{Colors.WARNING}[WARN] Duplicate Book ID detected!{Colors.ENDC}")
-            return jsonify({
-                "status": "warning",
-                "duplicate": True,
-                "message": f"Duplicate Book ID: {data.get('book_id')}",
-                "timestamp": datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%d %b %Y, %H:%M:%S")
-            }), 409  # 409 = Conflict (duplicate)
 
         # If no duplicate → success
         return jsonify({
