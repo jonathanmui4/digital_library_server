@@ -178,7 +178,7 @@ def receive_book():
                 "status": "warning",
                 "duplicate": True,
                 "message": f"Duplicate Book ID: {book_id}",
-                "timestamp": now_wib_iso(),   # or datetime.now().isoformat()
+                "timestamp": datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%d %b %Y, %H:%M:%S")
             }), 409  # Conflict
         
         # Store transaction for dashboard
@@ -195,7 +195,7 @@ def receive_book():
             'data': data,
             'timestamp': datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%d %b %Y, %H:%M:%S")
         }
-        
+
         if len(recent_transactions) > MAX_TRANSACTIONS:
             recent_transactions.pop()
 
